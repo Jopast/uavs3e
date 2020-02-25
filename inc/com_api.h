@@ -73,6 +73,7 @@ typedef struct uavs3e_com_img_t com_img_t;
 struct uavs3e_com_img_t {
     int        num_planes;          /* number of plane */
     long long  pts, dts;            /* time-stamps */
+    long long  ptr;
 
     int        width [MAX_PLANES];  /* width (in unit of pixel) */
     int        height[MAX_PLANES];  /* height (in unit of pixel) */

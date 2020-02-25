@@ -150,13 +150,13 @@ void rc_destroy(void *rc_handle)
 //  ABR:  Bits * qScale / (complex^(1 - QCompress))= C, calculate factor C through historical data
 //
 /*************************************************************************************************/
-int rc_get_qp(void *rc_handle, enc_ctrl_t *h)
+int rc_get_qp(void *rc_handle, enc_ctrl_t *h, com_pic_t *pic)
 {
     double qp;
     double min_qp = h->cfg.rc_min_qp;
     enc_rc_t *p = (enc_rc_t*)rc_handle;
-    com_pic_t *pic = h->pic_org;
     int temporal_id = pic->temporal_id;
+    long long ptr = h->node_curr->img->ptr;
 
     if (temporal_id <= 1) {
         p->shortTermCplxSum *= 0.5;
@@ -165,7 +165,7 @@ int rc_get_qp(void *rc_handle, enc_ctrl_t *h)
         p->shortTermCplxCount++;
 
         double blurredComplexity = pic->picture_satd_blur = pow(p->shortTermCplxSum / p->shortTermCplxCount, 1 - QCompress);
-        int sub_gop_frms = (int)(h->ptr - p->top_last_ptr);
+        int sub_gop_frms = (int)(ptr - p->top_last_ptr);
 
         if (p->max_bitrate != 0 && p->win_frames >= p->win_size - sub_gop_frms) {
             // calculate max_qp
@@ -202,7 +202,7 @@ int rc_get_qp(void *rc_handle, enc_ctrl_t *h)
                     qp = (int)(5.661 * log(lambda) + 13.131 + 0.5);
                     p->top_fwd_qp = qp;
                 } else {
-                    qp = enc_get_hgop_qp(p->top_fwd_qp, temporal_id, h->cfg.max_b_frames);
+                    qp = enc_get_hgop_qp(p->top_fwd_qp, temporal_id, h->info.sqh.low_delay);
                     // don't assign p->top_fwd_qp
                 }
             } else {
@@ -222,12 +222,12 @@ int rc_get_qp(void *rc_handle, enc_ctrl_t *h)
         }
         qp = COM_MAX(qp, min_qp);
         p->top_bwd_qp = qp;
-        p->top_last_ptr = h->ptr;
+        p->top_last_ptr = ptr;
     } else {
-        if (h->cfg.max_b_frames) {
-            qp = enc_get_hgop_qp((p->top_fwd_qp + p->top_bwd_qp * 3) / 4, temporal_id, h->cfg.max_b_frames);
-        } else {
-            qp = enc_get_hgop_qp(p->top_bwd_qp, temporal_id, h->cfg.max_b_frames);
+        if (h->info.sqh.low_delay) {
+            qp = enc_get_hgop_qp(p->top_bwd_qp, temporal_id, 1);
+        }else {
+            qp = enc_get_hgop_qp((p->top_fwd_qp + p->top_bwd_qp * 3) / 4, temporal_id, 0);
         }
     }
     return COM_CLIP3(h->cfg.rc_min_qp, h->cfg.rc_max_qp, (int)(qp + 0.5));
