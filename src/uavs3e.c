@@ -413,7 +413,6 @@ static void decision_rpl_of_pic(enc_ctrl_t *h, com_pic_header_t *pichdr)
         }
     }
 
-    pichdr->temporal_id   = h->cfg.rpls_l0[rpl_idx].temporal_id;
     pichdr->rpl_l0.num    = h->cfg.rpls_l0[rpl_idx].num;
     pichdr->rpl_l0.active = h->cfg.rpls_l0[rpl_idx].active;
     pichdr->rpl_l1.num    = h->cfg.rpls_l1[rpl_idx].num;
@@ -621,7 +620,6 @@ static void set_pic_header(enc_ctrl_t *h)
         init_pic_wq_matrix(pichdr->wq_4x4_matrix, pichdr->wq_8x8_matrix);
     }
 
-    pichdr->poc = h->node_curr->img->ptr;
     pichdr->progressive_frame  = 1;
     pichdr->picture_structure  = 1;
     pichdr->top_field_first    = 0;
@@ -743,148 +741,6 @@ int uavs3e_get_img(void *id, com_img_t **img)
         }
     }
     return COM_ERR_UNEXPECTED;
-}
-
-static s64 decide_normal_gop(enc_ctrl_t *h, s64 pic_imcnt, int *frm_depth)
-{
-    int i_period  = h->cfg.i_period;
-    int gop_size  = h->info.gop_size;
-    s64 ptr;
-
-    if (i_period == 0 && pic_imcnt == 0) {
-        h->pichdr.slice_type  = SLICE_I;
-        *frm_depth = FRM_DEPTH_0;
-        ptr = pic_imcnt;
-        h->node_curr->b_ref = 1;
-    } else if ((i_period != 0) && pic_imcnt % i_period  == 0) {
-        h->pichdr.slice_type  = SLICE_I;
-        *frm_depth = FRM_DEPTH_0;
-        ptr = pic_imcnt;
-        h->node_curr->b_ref = 1;
-    } else if (pic_imcnt % gop_size == 0) {
-        h->pichdr.slice_type  = SLICE_B;
-        h->node_curr->b_ref = 1;
-        *frm_depth = FRM_DEPTH_1;
-        ptr = pic_imcnt;
-        h->node_curr->b_ref = 1;
-    } else {
-        int b_ref;
-
-        h->pichdr.slice_type  = SLICE_B;
-        if (!h->cfg.disable_hgop) {
-            static tab_s8 tbl_slice_depth[5][15] = {
-                {    /* gop_size = 2 */
-                    FRM_DEPTH_2, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
-                }, { /* gop_size = 4 */
-                    FRM_DEPTH_2, FRM_DEPTH_3, FRM_DEPTH_3, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
-                }, { /* gop_size = 8 */
-                    FRM_DEPTH_2, FRM_DEPTH_3, FRM_DEPTH_4, FRM_DEPTH_4, FRM_DEPTH_3, FRM_DEPTH_4, FRM_DEPTH_4, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
-                }, { /* gop_size = 12 */
-                    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
-                }, { /* gop_size = 16 */
-                    FRM_DEPTH_2, FRM_DEPTH_3, FRM_DEPTH_4, FRM_DEPTH_5, FRM_DEPTH_5, FRM_DEPTH_4, FRM_DEPTH_5, FRM_DEPTH_5, FRM_DEPTH_3, FRM_DEPTH_4, FRM_DEPTH_5, FRM_DEPTH_5, FRM_DEPTH_4, FRM_DEPTH_5, FRM_DEPTH_5
-                }
-            };
-            static tab_s8 tbl_slice_ref[5][15] = {
-                /* gop_size = 2 */
-                { 1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
-                /* gop_size = 4 */
-                { 1, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
-                /* gop_size = 8 */
-                { 1, 1, 0, 0, 1, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
-                /* gop_size = 12 */
-                {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
-                /* gop_size = 16 */
-                {1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0}
-            };
-            static tab_s8 tbl_ref_depth[5][15] = {
-                /* gop_size = 2 */
-                { FRM_DEPTH_1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
-                /* gop_size = 4 */
-                { FRM_DEPTH_1, FRM_DEPTH_2, FRM_DEPTH_2, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
-                /* gop_size = 8 */
-                { FRM_DEPTH_1, FRM_DEPTH_2, FRM_DEPTH_3, FRM_DEPTH_3, FRM_DEPTH_2, FRM_DEPTH_3, FRM_DEPTH_3, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF },
-                /* gop_size = 12 */
-                {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }, /* gop_size = 12 */
-                /* gop_size = 16 */
-                { FRM_DEPTH_1, FRM_DEPTH_2, FRM_DEPTH_3, FRM_DEPTH_4, FRM_DEPTH_4, FRM_DEPTH_3, FRM_DEPTH_4, FRM_DEPTH_4,  FRM_DEPTH_2, FRM_DEPTH_3, FRM_DEPTH_4, FRM_DEPTH_4, FRM_DEPTH_3, FRM_DEPTH_4, FRM_DEPTH_4 }
-            };
-            static tab_s8 tbl_poc_gop_offset[5][15] = {
-                { -1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},  /* gop_size = 2 */
-                { -2,   -3,   -1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},  /* gop_size = 4 */
-                { -4,   -6,   -7,   -5,   -2,   -3,   -1, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},  /* gop_size = 8 */
-                {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, /* gop_size = 12 */
-                { -8,   -12, -14,  -15,  -13,  -10,  -11,   -9,   -4,   -6,   -7,   -5,   -2,   -3,   -1}   /* gop_size = 16 */
-            };
-
-            int pos = (pic_imcnt % gop_size) - 1;
-            *frm_depth = tbl_slice_depth[gop_size >> 2][pos];
-            ptr = ((pic_imcnt / gop_size) * gop_size) + tbl_poc_gop_offset[gop_size >> 2][pos];
-            b_ref = tbl_slice_ref[gop_size >> 2][pos];
-        } else {
-            int pos = (pic_imcnt % gop_size) - 1;
-            *frm_depth = FRM_DEPTH_2;
-            ptr = ((pic_imcnt / gop_size) * gop_size) - gop_size + pos + 1;
-            b_ref = 0;
-        }
-        /* find node_curr again here */
-        h->node_curr = &h->node_input[ptr % (h->cfg.max_b_frames * 2 + 1)];
-        h->node_curr->b_ref = b_ref;
-    }
-    return ptr;
-}
-
-static void decide_slice_type(enc_ctrl_t *h)
-{
-    int force_cnt =  0;
-    int i_period  = h->cfg.i_period;
-    s64 pic_icnt  = (h->pic_cnt + h->cfg.max_b_frames);
-    int frm_depth;
-
-    h->node_curr = &h->node_input[pic_icnt % (h->cfg.max_b_frames * 2 + 1)];
-
-    if (h->info.gop_size == 1) {
-        s64 pic_cnt = (i_period > 0) ? h->pic_cnt % i_period : h->pic_cnt;
-
-        if (pic_cnt == 0) { // all intra configuration
-            h->pichdr.slice_type  = SLICE_I;
-            frm_depth = FRM_DEPTH_0;
-            h->node_curr->b_ref = 1;
-        } else {
-            h->pichdr.slice_type  = SLICE_B;
-            if (!h->cfg.disable_hgop) {
-                static tab_s8 tbl_slice_depth_P[4] = { FRM_DEPTH_3,  FRM_DEPTH_2, FRM_DEPTH_3, FRM_DEPTH_1 };
-                frm_depth = tbl_slice_depth_P[(pic_cnt - 1) % 4];
-            } else {
-                frm_depth = FRM_DEPTH_1;
-            }
-            h->node_curr->b_ref = 1;
-        }
-    } else { /* include B Picture (gop_size = 2 or 4 or 8 or 16) */
-        if (h->pic_cnt == 0) { /* special case when sequence start */
-            h->pichdr.slice_type  = SLICE_I;
-            frm_depth = FRM_DEPTH_0;
-            /* flush the first IDR picture */
-            h->node_curr = &h->node_input[0];
-            h->node_curr->b_ref = 1;
-        } else if (h->force_slice) {
-            for (force_cnt = h->force_ignored_cnt; force_cnt < h->info.gop_size; force_cnt++) {
-                pic_icnt = (h->pic_cnt + h->cfg.max_b_frames + force_cnt);
-                s64 ptr = decide_normal_gop(h, pic_icnt, &frm_depth);
-                if (ptr <= h->pic_last_cnt) {
-                    break;
-                }
-            }
-            h->force_ignored_cnt = force_cnt;
-        } else { /* normal GOP case */
-            decide_normal_gop(h, pic_icnt, &frm_depth);
-        }
-    }
-    if (h->cfg.disable_hgop) {
-        frm_depth = 0;
-    }
-    h->node_curr->temporal_id = frm_depth;
-    h->pichdr.dtr = h->pic_cnt;
 }
 
 int enc_pic_finish(enc_ctrl_t *h, pic_thd_param_t *pic_thd, enc_stat_t *stat)
@@ -1151,7 +1007,7 @@ void *enc_pic_thread(enc_pic_t *ep, pic_thd_param_t *p)
             p->total_qp += row->total_qp;
         }
     } else {
-        if (pic_org->temporal_id < 3) {
+        if (pic_org->layer_id < 3) {
             uavs3e_threadpool_set_priority(ep->wpp_threads_pool, THREAD_PRIORITY_HIGHEST);
         }
         for (int lcu_y = 0; lcu_y < info->pic_height_in_lcu; lcu_y++) {
@@ -1168,7 +1024,7 @@ void *enc_pic_thread(enc_pic_t *ep, pic_thd_param_t *p)
             uavs3e_threadpool_wait(ep->wpp_threads_pool, row);
             p->total_qp += row->total_qp;
         }
-        if (pic_org->temporal_id < 3) {
+        if (pic_org->layer_id < 3) {
             uavs3e_threadpool_set_priority(ep->wpp_threads_pool, THREAD_PRIORITY_NORMAL);
         }
     }
@@ -1321,7 +1177,7 @@ void *enc_pic_thread(enc_pic_t *ep, pic_thd_param_t *p)
     pic_rec->picture_qp        = pic_org->picture_qp;
     pic_rec->picture_satd      = pic_org->picture_satd;
     pic_rec->picture_satd_blur = pic_org->picture_satd_blur;
-    pic_rec->temporal_id       = pic_org->temporal_id;
+    pic_rec->layer_id       = pic_org->layer_id;
 
     return ep;
 }
@@ -1333,13 +1189,15 @@ void push_sub_gop(enc_ctrl_t *h, int start, int num, int level)
             input_node_t *node = &h->node_list[h->node_size++];
             node->img = h->img_ilist[start];
             node->b_ref = 0;
-            node->temporal_id = level;
+            node->layer_id = level;
+            node->type = SLICE_B;
 
             if (num == 2 && h->img_ilist[start + 1]) {
                 node = &h->node_list[h->node_size++];
                 node->img = h->img_ilist[start + 1];
                 node->b_ref = 0;
-                node->temporal_id = level;
+                node->layer_id = level;
+                node->type = SLICE_B;
             }
         }
     } else {
@@ -1349,7 +1207,8 @@ void push_sub_gop(enc_ctrl_t *h, int start, int num, int level)
             input_node_t *node = &h->node_list[h->node_size++];
             node->img = h->img_ilist[idx];
             node->b_ref = 1;
-            node->temporal_id = level;
+            node->layer_id = level;
+            node->type = SLICE_B;
         }
         push_sub_gop(h, start, num / 2, level + 1);
         push_sub_gop(h, idx + 1,  num - num / 2 - 1, level + 1);
@@ -1358,38 +1217,99 @@ void push_sub_gop(enc_ctrl_t *h, int start, int num, int level)
 
 int enc_push_frm(enc_ctrl_t *h, com_img_t *img)
 {
-    h->pic_icnt++;
+    img->ptr = h->ptr++;
 
-    img->ptr = h->pic_icnt;
+    com_img_addref(img);
 
-    if (h->lastI_ptr == -1) {
+    if (h->lastI_ptr == -1 || h->cfg.i_period == 1) { // AI or first frame
         input_node_t *node = &h->node_list[h->node_size++];
         node->img = img;
         node->b_ref = 1;
-        node->temporal_id = 0;
-
-        h->lastI_ptr = h->pic_icnt;
-    } else {
-        h->img_ilist[h->img_isize++] = img;
-    }
-
-    if (h->img_isize == h->cfg.max_b_frames + 1) {
+        node->layer_id = FRM_DEPTH_0;
+        node->type = SLICE_I;
+        h->lastI_ptr = img->ptr;
+    } else if (h->cfg.max_b_frames == 0) { // LD
         input_node_t *node = &h->node_list[h->node_size++];
-        node->img = h->img_ilist[h->img_isize - 1];
+        node->img = img;
         node->b_ref = 1;
-        node->temporal_id = 0;
 
-        if (h->img_isize - 1 > 0) {
-            push_sub_gop(h, 0, h->img_isize - 1, 1);
+        if (h->cfg.i_period && img->ptr - h->lastI_ptr == h->cfg.i_period) {
+            node->type = SLICE_I;
+            node->layer_id = FRM_DEPTH_0;
+            h->lastI_ptr = img->ptr;
+        } else {
+            node->type = SLICE_B;
+
+            if (!h->cfg.disable_hgop) {
+                static tab_s8 tbl_slice_depth_P[4] = { FRM_DEPTH_3,  FRM_DEPTH_2, FRM_DEPTH_3, FRM_DEPTH_1 };
+                node->layer_id = tbl_slice_depth_P[(img->ptr - h->lastI_ptr - 1) % 4];
+            } else {
+                node->layer_id = FRM_DEPTH_1;
+            }
         }
-        memset(h->img_ilist, 0, sizeof(com_img_t*) * MAX_REORDER_BUF);
-        h->img_isize = 0;
+    } else { // RA
+        h->img_ilist[h->img_isize++] = img;
+
+        if (h->cfg.i_period && img->ptr - h->lastI_ptr == h->cfg.i_period) {
+            h->lastI_ptr = img->ptr;
+
+            if (h->cfg.close_gop) {
+                if (h->img_isize > 1) {
+                    input_node_t *node = &h->node_list[h->node_size++];
+                    node->img = h->img_ilist[h->img_isize - 2];
+                    node->b_ref = 1;
+                    node->layer_id = FRM_DEPTH_1;
+                    node->type = SLICE_B;
+
+                    if (h->img_isize > 2) {
+                        if (!h->cfg.disable_hgop) {
+                            push_sub_gop(h, 0, h->img_isize - 2, FRM_DEPTH_2);
+                        } else {
+                            for (int i = 0; i < h->img_isize - 2; i++) {
+                                input_node_t *node = &h->node_list[h->node_size++];
+                                node->img = h->img_ilist[i];
+                                node->b_ref = 0;
+                                node->layer_id = FRM_DEPTH_2;
+                                node->type = SLICE_B;
+                            }
+                        }
+                    }
+                }
+                input_node_t *node = &h->node_list[h->node_size++];
+                node->img = h->img_ilist[h->img_isize - 1];
+                node->b_ref = 1;
+                node->layer_id = FRM_DEPTH_0;
+                node->type = SLICE_I;
+
+                memset(h->img_ilist, 0, sizeof(com_img_t*) * MAX_REORDER_BUF);
+                h->img_isize = 0;
+            } else {
+                input_node_t *node = &h->node_list[h->node_size++];
+                node->img = h->img_ilist[h->img_isize - 1];
+                node->b_ref = 1;
+                node->layer_id = FRM_DEPTH_0;
+                node->type = SLICE_I;
+
+                if (h->img_isize - 1 > 0) {
+                    push_sub_gop(h, 0, h->img_isize - 1, FRM_DEPTH_2);
+                }
+                memset(h->img_ilist, 0, sizeof(com_img_t*) * MAX_REORDER_BUF);
+                h->img_isize = 0;
+            }
+        } else if (h->img_isize == h->cfg.max_b_frames + 1) {
+            input_node_t *node = &h->node_list[h->node_size++];
+            node->img = h->img_ilist[h->img_isize - 1];
+            node->b_ref = 1;
+            node->layer_id = FRM_DEPTH_1;
+            node->type = SLICE_B;
+
+            if (h->img_isize - 1 > 0) {
+                push_sub_gop(h, 0, h->img_isize - 1, FRM_DEPTH_2);
+            }
+            memset(h->img_ilist, 0, sizeof(com_img_t*) * MAX_REORDER_BUF);
+            h->img_isize = 0;
+        }
     }
-    
-    h->node_curr = &h->node_input[h->pic_icnt % (h->cfg.max_b_frames * 2 + 1)];
-    h->node_curr->img = img;
-    
-    com_img_addref(img);
 
     return COM_OK;
 }
@@ -1433,8 +1353,6 @@ void *uavs3e_create(enc_cfg_t *cfg, int *err)
 
     set_sqh(h, &h->info.sqh);
 
-    h->pic_cnt   =  0;
-    h->pic_icnt  = -1;
     h->prev_ptr  = -1;
     h->lastI_ptr = -1;
 
@@ -1524,32 +1442,6 @@ void uavs3e_free(void *id)
     com_scan_tbl_delete();
 }
 
-static int check_frame_delay(enc_ctrl_t *h)
-{
-    if (h->pic_icnt < h->cfg.max_b_frames) {
-        return COM_OK_OUT_NOT_AVAILABLE;
-    }
-    return COM_OK;
-}
-
-static int check_more_frames(enc_ctrl_t *h)
-{
-    int i;
-    int pico_max_cnt = 1 + (h->cfg.max_b_frames << 1);
-
-    if (h->force_output) {
-        h->pic_icnt++;
-
-        for (i = 0; i < pico_max_cnt; i++) {
-            if (h->node_input[i].img) {
-                return COM_OK;
-            }
-        }
-        return COM_OK_NO_MORE_FRM;
-    }
-    return COM_OK;
-}
-
 int uavs3e_enc(void *id, enc_stat_t *stat, com_img_t *img_enc)
 {
     enc_ctrl_t *h = (enc_ctrl_t *)id;
@@ -1558,63 +1450,49 @@ int uavs3e_enc(void *id, enc_stat_t *stat, com_img_t *img_enc)
 
     if (img_enc) {
         ret = enc_push_frm(h, img_enc);
+
+        /* store input picture and return if needed */
+        if (h->ptr < h->cfg.max_b_frames + 1) {
+            return COM_OK_OUT_NOT_AVAILABLE;
+        }
     } else { // flush
-        if (h->force_output == 0) {
-            h->force_output = 1;
-            h->pic_last_cnt = h->pic_icnt;
+        if (h->img_isize) {
+            push_sub_gop(h, 0, h->cfg.max_b_frames, FRM_DEPTH_2);
+            memset(h->img_ilist, 0, sizeof(com_img_t*) * MAX_REORDER_BUF);
+            h->img_isize = 0;
+        }
 
-            if (h->img_isize) {
-                push_sub_gop(h, 0, h->cfg.max_b_frames, 1);
-                memset(h->img_ilist, 0, sizeof(com_img_t*) * MAX_REORDER_BUF);
-                h->img_isize = 0;
+        /* check whether input pictures are remaining or not in node_input[] */
+        if (!h->node_size) { // bumping
+            if (h->pic_thd_active) {
+                h->pic_thd_idx = (h->pic_thd_idx + 1) % h->cfg.frm_threads;
+                pic_thd_param_t *pic_thd_param = &h->pic_thd_params[h->pic_thd_idx];
+
+                uavs3e_threadpool_wait(h->frm_threads_pool, pic_thd_param);
+
+                enc_pic_finish(h, pic_thd_param, stat);
+                h->pic_thd_active--;
+
+                if (h->cfg.rc_type != RC_TYPE_NULL) {
+                    h->rc.update(h->rc.handle, pic_thd_param->pic_rec, stat->ext_info, stat->ext_info_buf_size);
+                }
+                return COM_OK;
+            } else {
+                return COM_OK_NO_MORE_FRM;
             }
         }
     }
 
-    /* check whether input pictures are remaining or not in node_input[] */
-    if (COM_OK_NO_MORE_FRM == check_more_frames(h)) { // bumping
-        if (h->pic_thd_active) {
-            h->pic_thd_idx = (h->pic_thd_idx + 1) % h->cfg.frm_threads;
-            pic_thd_param_t *pic_thd_param = &h->pic_thd_params[h->pic_thd_idx];
-
-            uavs3e_threadpool_wait(h->frm_threads_pool, pic_thd_param);
-
-            enc_pic_finish(h, pic_thd_param, stat);
-            h->pic_thd_active--;
-
-            if (h->cfg.rc_type != RC_TYPE_NULL) {
-                h->rc.update(h->rc.handle, pic_thd_param->pic_rec, stat->ext_info, stat->ext_info_buf_size);
-            }
-            return COM_OK;
-        } else {
-            return COM_OK_NO_MORE_FRM;
-        }
-    }
-    /* store input picture and return if needed */
-    if (COM_OK_OUT_NOT_AVAILABLE == check_frame_delay(h)) {
-        return COM_OK_OUT_NOT_AVAILABLE;
-    }
-
-    h->force_slice = ((h->pic_last_cnt % gop_size >= h->pic_last_cnt - h->pic_cnt + 1) && h->force_output) ? 1 : 0;
+    assert(h->node_size > 0);
 
     /* initialize variables for a picture encoding */
     com_pic_t *pic_rec = com_refm_find_free_pic(&h->rpm, &ret);
-    decide_slice_type(h);
-
     input_node_t node = h->node_list[0];
     memcpy(h->node_list, h->node_list + 1, (h->node_size - 1) * sizeof(input_node_t));
     memset(&h->node_list[h->node_size - 1], 0, sizeof(input_node_t));
     h->node_size--;
-    assert(h->node_size >= 0);
-
-    if (node.img != h->node_curr->img) {
-        printf("!!!\n");
-    }
-
-    /* Set picture header */
-    set_pic_header(h);
     
-    com_img_t *img_org = h->node_curr->img;
+    com_img_t *img_org = node.img;
     com_pic_t pic_org;
 
     com_mset(&pic_org, 0, sizeof(com_pic_t));
@@ -1628,23 +1506,28 @@ int uavs3e_enc(void *id, enc_stat_t *stat, com_img_t *img_enc)
     pic_org.stride_luma   = STRIDE_IMGB2PIC(img_org->stride[0]);
     pic_org.stride_chroma = STRIDE_IMGB2PIC(img_org->stride[1]);
     pic_org.img           = img_org;
-    pic_org.temporal_id   = h->node_curr->temporal_id;
-    pic_org.b_ref         = h->node_curr->b_ref;
+    pic_org.layer_id   = node.layer_id;
+    pic_org.b_ref         = node.b_ref;
 
     com_info_t *info         = &h->info;
     com_seqh_t  *sqh         = &info->sqh;
     com_pic_header_t *pichdr = &h->pichdr;
 
-    h->node_curr->img = NULL;
-    
+    pichdr->slice_type = node.type;
+    pichdr->poc = node.img->ptr;
+    pichdr->dtr = h->dtr++;
+
+    /* Set picture header */
+    set_pic_header(h);
+
     if (h->cfg.rc_type == RC_TYPE_NULL) {
         int qp = COM_CLIP3(MIN_QUANT - h->info.qp_offset_bit_depth, MAX_QUANT_BASE, h->cfg.qp);
         if (!h->cfg.disable_hgop) {
-            qp = (int)(enc_get_hgop_qp(qp, pic_org.temporal_id, h->info.sqh.low_delay) + 0.5);
+            qp = (int)(enc_get_hgop_qp(qp, pic_org.layer_id, h->info.sqh.low_delay) + 0.5);
         }
         pic_org.picture_qp = (u8)COM_CLIP3(MIN_QUANT, (MAX_QUANT_BASE + h->info.qp_offset_bit_depth), qp + h->info.qp_offset_bit_depth);
     } else {
-        pic_org.picture_satd = cal_pic_cost(h, pic_rec->map_mv);
+        pic_org.picture_satd = cal_pic_cost(h, node.img, pic_rec->map_mv);
         int qp = h->rc.get_qp(h->rc.handle, h, &pic_org);
         pic_org.picture_qp = (u8)COM_CLIP3(MIN_QUANT, (MAX_QUANT_BASE + h->info.qp_offset_bit_depth), qp + h->info.qp_offset_bit_depth);
     }
@@ -1678,7 +1561,6 @@ int uavs3e_enc(void *id, enc_stat_t *stat, com_img_t *img_enc)
     h->prev_dtr = pichdr->dtr % DOI_CYCLE_LENGTH;
     h->prev_ptr = img_org->ptr;
     h->prev_pts = img_org->pts;
-    h->pic_cnt++; /* increase picture count */
 
     pic_thd_param_t *pic_thd_param = &h->pic_thd_params[h->pic_thd_idx];
     pic_thd_param->param     = &h->cfg;

@@ -93,7 +93,6 @@ struct uavs3e_com_img_t {
 typedef struct uavs3e_com_rpl_t {
     int slice_type;
     int poc;
-    int temporal_id;
     int num;
     int active;
     int ref_poc[MAX_REFS];

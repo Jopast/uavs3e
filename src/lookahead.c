@@ -46,11 +46,10 @@ static void lookahead_get_ipred_nbr(pel *dst, int x, int y, int w, int h, int pi
     }
 }
 
-double cal_pic_cost(enc_ctrl_t *h, s16(*map_mv)[REFP_NUM][MV_D])
+double cal_pic_cost(enc_ctrl_t *h, com_img_t *img_org, s16(*map_mv)[REFP_NUM][MV_D])
 {
     com_info_t *info   = &h->info;
     inter_search_t *pi = &h->preprocess_pinter;
-    com_img_t *img_org = h->node_curr->img;
     const int base_qp = 32;
     const double base_lambda = 1.43631 * pow(2.0, (base_qp - 16.0) / 4.0);
     int bit_depth = info->bit_depth_internal;

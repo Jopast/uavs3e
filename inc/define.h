@@ -50,7 +50,7 @@
 #define MAX_COST_EXT            (MAX_COST * 0.999999999)
 
 /* virtual frame depth B picture */
-#define FRM_DEPTH_0                   0
+#define FRM_DEPTH_0                   0 // only for I frame
 #define FRM_DEPTH_1                   1
 #define FRM_DEPTH_2                   2
 #define FRM_DEPTH_3                   3
@@ -82,8 +82,9 @@ struct uavs3e_enc_rc_handle_t {
  *****************************************************************************/
 typedef struct uavs3e_input_node_t {
     com_img_t *img;      /* original picture store     */
-    u8         b_ref;
-    u8         temporal_id;
+    int        b_ref;
+    int        layer_id;
+    int        type;
 } input_node_t;
 
 /*****************************************************************************
@@ -395,9 +396,6 @@ typedef struct uavs3e_pic_thd_param_t {
 struct uavs3e_enc_ctrl_t {
     enc_cfg_t cfg;                                   /* encoding parameter */
 
-    input_node_t      node_input[ENC_MAX_INPUT_BUF]; /* address of current input picture, ref_picture  buffer structure */
-    input_node_t     *node_curr;                     /* address of current input picture buffer structure */
-
     com_img_t        *img_ilist[MAX_REORDER_BUF];
     int               img_isize;
     input_node_t      node_list[MAX_REORDER_BUF];
@@ -408,17 +406,12 @@ struct uavs3e_enc_ctrl_t {
     com_img_t       **ilist_imgs;                    /* image buffer for input, include used and idle */
                       
     u8                prev_dtr;                      /* dtr % DOI_CYCLE_LENGTH */
-    s64               pic_cnt;                       /* current encoding picture count(Just count of encoded picture correctly) */
-    s64               pic_icnt;                      /* current picture input count (only update when CTX0) */
-    s64               pic_last_cnt;                  /* total input picture count (only used for bumping process) */
+    s64               dtr;                           /* index of decoder order */
+    s64               ptr;                           /* index of play order    */
                       
     s64               prev_pts;                      /* used to calculate dts */
     s64               prev_ptr;                      /* used to calculate dts */
                       
-    u8                force_slice;                   /* remaining pictures is encoded to p or b slice (only used for bumping process) */
-    int               force_ignored_cnt;             /* ignored pictures for force slice count (unavailable pictures cnt in gop, only used for bumping process) */
-    int               force_output;
-
     /*** copy to enc_pic_t ***/
     com_info_t        info;
     com_pic_header_t  pichdr;
